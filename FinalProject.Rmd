@@ -1,0 +1,136 @@
+---
+title: "FinalProject"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+setwd("/Users/sinclaireschuetze/Desktop/STAT228")
+mydata <- read.csv("OnlineNewsPopularity.csv",header=TRUE)
+head(mydata)
+
+dfNoCat <- mydata[,-c(1,14,32,39)] #removes URL and various dummy variables
+head(dfNoCat)
+
+cor(dfNoCat)
+
+library("car")
+options(scipen=999)
+lm <- lm(shares~., data = dfNoCat)
+vif(lm, threshold = 10)
+
+#remove LDA03
+dfNoLDA03 <- dfNoCat[,-c(39)]
+head(dfNoLDA03)
+lm2 <- lm(shares~., data = dfNoLDA03)
+vif(lm2, threshold = 10)
+
+#remove n_non_stop_unique_tokens
+dfNoNonStop <- dfNoLDA03[,-c(6)]
+head(dfNoNonStop)
+lm3 <- lm(shares~., data = dfNoNonStop)
+vif(lm3, threshold = 10)
+
+#remove n_unique_tokens
+dfNoUnique <- dfNoNonStop[,-c(4)]
+head(dfNoUnique)
+lm4 <- lm(shares~., data = dfNoUnique)
+vif(lm4, threshold = 10)
+
+#remove self_reference_avg_sharess 
+dfNoSelfReference <- dfNoUnique[,-c(27)]
+head(dfNoSelfReference)
+lm5 <- lm(shares~., data = dfNoSelfReference)
+vif(lm5, threshold = 10)
+
+#remove rate_positive_words
+dfNoPositive <- dfNoSelfReference[,-c(41)]
+head(dfNoPositive)
+lm6 <- lm(shares~., data = dfNoPositive)
+vif(lm6, threshold = 10)
+
+#remove kw_max_min
+dfNoKW<- dfNoPositive[,-c(17)]
+head(dfNoKW)
+lm7 <- lm(shares~., data = dfNoKW)
+vif(lm7, threshold = 10)
+
+dfAfterVIF <- dfNoKW
+
+#identifying outliers
+par(mfrow = c(2,2))
+vifLm <- lm(shares~., data = dfAfterVIF)
+plot(vifLm)
+dfNoOutliers <- dfAfterVIF[-c(9366,5371,23238,16269,18038,1038),]
+dfAfterVIF <- dfNoOutliers
+
+#AIC stepwise regression
+attach(dfAfterVIF)
+fullModelAIC <- lm(shares~.,data = dfAfterVIF)
+step(fullModelAIC, direction = "both",k=2, trace = 0)
+
+#BIC stepwise regression
+fullModelBIC <- lm(shares~.,data = dfAfterVIF)
+step(fullModelBIC, direction = "both",k=log(length(dfAfterVIF$shares)), trace = 0)
+
+#Cross Validation AIC
+library(boot)
+set.seed(1)
+cv.glm(data = dfAfterVIF, glm(shares~timedelta + n_tokens_title + num_hrefs + 
+    num_self_hrefs + num_imgs + average_token_length + num_keywords + 
+    data_channel_is_entertainment + data_channel_is_bus + kw_min_min + 
+    kw_avg_min + kw_min_max + kw_min_avg + kw_max_avg + kw_avg_avg + 
+    self_reference_min_shares + self_reference_max_shares + weekday_is_tuesday + 
+    weekday_is_wednesday + weekday_is_thursday + weekday_is_friday + 
+    weekday_is_saturday + LDA_01 + LDA_02 + LDA_04 + global_subjectivity + 
+    global_rate_positive_words + min_positive_polarity + min_negative_polarity + 
+    max_negative_polarity + title_sentiment_polarity + abs_title_subjectivity + 
+    abs_title_sentiment_polarity))$delta[1] 
+
+#Cross Validation BIC
+set.seed(1)
+cv.glm(data = dfAfterVIF, glm(shares ~ timedelta + n_tokens_title + num_hrefs + 
+    num_self_hrefs + num_imgs + average_token_length + data_channel_is_entertainment + 
+    kw_min_min + kw_avg_min + kw_min_avg + kw_max_avg + kw_avg_avg + 
+    self_reference_min_shares + global_subjectivity))$delta[1] 
+
+AICmodel <- lm(shares~timedelta + n_tokens_title + num_hrefs + 
+    num_self_hrefs + num_imgs + average_token_length + num_keywords + 
+    data_channel_is_entertainment + data_channel_is_bus + kw_min_min + 
+    kw_avg_min + kw_min_max + kw_min_avg + kw_max_avg + kw_avg_avg + 
+    self_reference_min_shares + self_reference_max_shares + weekday_is_tuesday + 
+    weekday_is_wednesday + weekday_is_thursday + weekday_is_friday + 
+    weekday_is_saturday + LDA_01 + LDA_02 + LDA_04 + global_subjectivity + 
+    global_rate_positive_words + min_positive_polarity + min_negative_polarity + 
+    max_negative_polarity + title_sentiment_polarity + abs_title_subjectivity + 
+    abs_title_sentiment_polarity, data = dfAfterVIF)
+
+BICmodel <- lm(shares ~ timedelta + n_tokens_title + num_hrefs + 
+    num_self_hrefs + num_imgs + average_token_length + data_channel_is_entertainment + 
+    kw_min_min + kw_avg_min + kw_min_avg + kw_max_avg + kw_avg_avg + 
+    self_reference_min_shares + global_subjectivity, data = dfAfterVIF)
+
+summary(AICmodel)
+summary(BICmodel)
+
+#PCA
+library(pls)
+PCAmodel <- pcr(shares~.,data = dfAfterVIF, scale = TRUE, validation = "CV")
+summary(PCAmodel)
+PCAmodel$loadings 
+
+X <- dfAfterVIF[,-1]
+Z <- scale(X)%*%(PCAmodel$loadings)
+
+fit.new <- lm(dfAfterVIF$shares~Z[,c(1,2,3)]) #model without 3rd PC
+summary(fit.new)
+```
